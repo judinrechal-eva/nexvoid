@@ -1,0 +1,1041 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>ECHO</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;background:#010104;overflow:hidden;font-family:'Press Start 2P',ui-monospace,monospace;color:#e6f7ff}
+  body{display:flex;align-items:center;justify-content:center}
+  canvas#game{display:block;touch-action:none;border:2px solid #0f2a3a;box-shadow:0 0 50px #0aa6c033}
+  body::after{content:"";position:fixed;inset:0;pointer-events:none;
+    background:repeating-linear-gradient(0deg,rgba(0,0,0,.2) 0 1px,transparent 1px 3px);mix-blend-mode:multiply}
+  .overlay{position:fixed;inset:0;display:none;align-items:flex-start;justify-content:center;background:rgba(1,1,4,.92);z-index:5;padding:16px;overflow:auto}
+  .overlay.show{display:flex}
+  .panel{max-width:1000px;width:100%;text-align:center;margin:auto}
+  h1{font-size:clamp(40px,9vw,96px);letter-spacing:14px;color:#3ef0ff;margin-bottom:10px;
+     text-shadow:0 0 18px #3ef0ff,0 0 40px #0aa6c0;animation:pulse 2.4s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:1;letter-spacing:14px}50%{opacity:.55;letter-spacing:18px}}
+  .sub{color:#ff2e63;font-size:clamp(9px,1.6vw,12px);margin-bottom:22px;letter-spacing:2px}
+  h2{font-size:clamp(14px,2.6vw,26px);margin-bottom:14px}
+  h2.lose{color:#ff2e63;text-shadow:0 0 10px #ff2e63}
+  h2.win{color:#3ef0ff;text-shadow:0 0 10px #3ef0ff}
+  .tag{color:#9fd9e8;font-size:clamp(9px,1.5vw,12px);line-height:2.1;margin-bottom:24px}
+  .how{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:0 auto 24px;max-width:880px}
+  .how div{border:2px solid #0f2a3a;padding:12px;font-size:9px;line-height:1.9;background:#040b12;text-align:left}
+  .how b{color:#ffe14d;display:block;margin-bottom:6px}
+  button{font-family:inherit;font-size:13px;padding:14px 26px;margin:6px;cursor:pointer;color:#010104;background:#3ef0ff;border:none;box-shadow:4px 4px 0 #ff2e63}
+  button:hover{transform:translate(-1px,-1px);box-shadow:5px 5px 0 #ff2e63}
+  button.alt{background:#ffe14d}
+  .hs{font-size:10px;color:#6aa9bb;margin-top:14px}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+  .stat{border:2px solid #0f2a3a;background:#040b12;padding:10px}
+  .stat .v{font-size:18px;color:#ffe14d;margin-top:8px}
+  .stat .l{font-size:8px;color:#6aa9bb}
+  .charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px;margin-bottom:12px}
+  .chart{border:2px solid #0f2a3a;background:#040b12;padding:8px}
+  .chart p{font-size:8px;color:#6aa9bb;margin-bottom:6px;text-align:left}
+  .chart canvas{width:100%;height:auto;display:block}
+  .report,.logs{border:2px solid #3ef0ff;background:#03121a;padding:14px;font-size:9px;line-height:2.1;text-align:left;margin-bottom:12px}
+  .logs{border-color:#ffe14d;background:#141003}
+  .report b{color:#ff2e63}
+  .hd{color:#3ef0ff;font-size:11px}
+  .logs .hd{color:#ffe14d}
+  .logs .miss{color:#4a5a60}
+  .verdict{font-size:11px;color:#9fd9e8;margin-bottom:12px;line-height:1.8}
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<!-- MENU -->
+<div class="overlay show" id="menu">
+  <div class="panel">
+    <h1>ECHO</h1>
+    <div class="sub">THE CITY WENT SILENT AT 3:12 AM</div>
+    <div class="tag">YOU CANNOT SEE IN THE DARK. YOU CAN ONLY LISTEN.<br>EVERY SOUND YOU MAKE SHOWS YOU THE WORLD.<br>EVERY SOUND YOU MAKE TELLS IT WHERE YOU ARE.</div>
+    <div class="how">
+      <div><b>ECHO PULSE</b>SPACE (mobile: tap)<br>Sends out sound that reveals walls, enemies and secrets for a moment. But it hears every pulse.</div>
+      <div><b>MOVE + DASH</b>WASD / ARROWS to move<br>SHIFT to dash (mobile: drag, double-tap)<br>Dash destroys its spawn and breaks cracked walls</div>
+      <div><b>THE MYSTERY</b>Find 6 lost recordings. 2 are hidden behind cracked walls. Then return to the Resonator.<br>J = journal</div>
+      <div><b>IT LEARNS YOU</b>Between pulses it guesses where you went. The red ring is its guess. Be unpredictable and it loses you.</div>
+    </div>
+    <button id="startBtn">ENTER THE SILENCE [ENTER]</button>
+    <div class="hs" id="hsMenu"></div>
+  </div>
+</div>
+
+<!-- END SCREEN -->
+<div class="overlay" id="over">
+  <div class="panel">
+    <h2 id="overTitle" class="lose"></h2>
+    <div class="verdict" id="verdict"></div>
+    <div class="stats" id="stats"></div>
+    <div class="report" id="report"></div>
+    <div class="logs" id="logs"></div>
+    <div class="charts">
+      <div class="chart"><p>WHERE YOU WENT (MOVEMENT HEATMAP)</p><canvas id="heat" width="480" height="300"></canvas></div>
+      <div class="chart"><p><span style="color:#3ef0ff">YOUR UNPREDICTABILITY</span> vs <span style="color:#ff2e63">ITS PREDICTION ACCURACY</span></p><canvas id="line" width="480" height="300"></canvas></div>
+    </div>
+    <div class="chart" style="margin-bottom:14px"><p>YOUR MOVEMENT HABITS (WHAT IT STUDIED)</p><canvas id="dirs" width="960" height="150"></canvas></div>
+    <button id="againBtn">PLAY AGAIN [R]</button>
+    <button class="alt" id="menuBtn">MENU</button>
+  </div>
+</div>
+
+<script>
+'use strict';
+/* =========================================================
+   ECHO  |  PixelForge 2026  |  Theme: THE UNKNOWN
+
+   A silent city in total darkness. You see only by sending
+   out sound pulses (echolocation). Every pulse also reveals
+   your position to a creature that hunts by sound.
+   Between pulses it GUESSES where you went, using an online
+   Markov model of your movement habits. Predictable players
+   get found in the dark. Unpredictable players stay hidden.
+   Find 6 recordings to solve why the city went silent.
+   ========================================================= */
+
+// ---------- Setup ----------
+const W = 960, H = 600;            // logical resolution
+const HX = 48, HY = 30;            // heatmap grid
+const SPEED = 220;                 // player speed px/s
+const TOP = 44;                    // HUD height
+const PULSE_SPEED = 560, PULSE_MAX = 400, PULSE_CD = 0.8;
+const REVEAL = 1.8;                // seconds an echo stays visible
+const cv = document.getElementById('game');
+const ctx = cv.getContext('2d');
+cv.width = W; cv.height = H;
+
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const rand = (a, b) => a + Math.random() * (b - a);
+const lerp = (a, b, t) => a + (b - a) * t;
+const dist = (a, b, c, d) => Math.hypot(a - c, b - d);
+const FONT = s => s + 'px "Press Start 2P", monospace';
+
+function fit() {
+  const s = Math.min(innerWidth / W, innerHeight / H) * 0.98;
+  cv.style.width = (W * s) + 'px';
+  cv.style.height = (H * s) + 'px';
+}
+addEventListener('resize', fit); fit();
+
+// ---------- Sound (WebAudio, no files needed) ----------
+let AC = null;
+function sfx(freq = 440, dur = 0.1, type = 'square', vol = 0.05, slide = 0, delay = 0) {
+  try {
+    AC = AC || new (window.AudioContext || window.webkitAudioContext)();
+    const t = AC.currentTime + delay, o = AC.createOscillator(), g = AC.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(freq, t);
+    if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, freq + slide), t + dur);
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(AC.destination);
+    o.start(t); o.stop(t + dur);
+  } catch (e) {}
+}
+
+// ---------- Directions: 0 = still, 1..8 = E, NE, N, NW, W, SW, S, SE ----------
+const DIRS = [[0, 0]];
+for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; DIRS.push([Math.cos(a), -Math.sin(a)]); }
+const DNAMES = ['STANDING STILL', 'RIGHT', 'UP-RIGHT', 'UP', 'UP-LEFT', 'LEFT', 'DOWN-LEFT', 'DOWN', 'DOWN-RIGHT'];
+const ARROWS = ['•', '→', '↗', '↑', '↖', '←', '↙', '↓', '↘'];
+function stateOf(x, y) {
+  if (Math.abs(x) < 1e-6 && Math.abs(y) < 1e-6) return 0;
+  let a = Math.atan2(-y, x); if (a < 0) a += Math.PI * 2;
+  return 1 + (Math.round(a / (Math.PI / 4)) % 8);
+}
+
+// ---------- THE LISTENER'S BRAIN: online, recency-weighted Markov model ----------
+// It hears your footsteps 5x per second and learns
+// P(next direction | current direction). Old habits slowly fade,
+// so if you change your style, it re-learns you.
+const PRIOR = 0.3, DECAY = 0.985;
+class Brain {
+  constructor() {
+    this.T = Array.from({ length: 9 }, () => Array(9).fill(PRIOR));
+    this.raw = Array.from({ length: 9 }, () => Array(9).fill(0));
+    this.n = Array(9).fill(0);
+    this.hist = Array(9).fill(0);
+    this.prev = 0; this.guess = -1; this.preds = 0; this.correct = 0;
+  }
+  observe(s) {
+    if (this.guess >= 0) { this.preds++; if (this.guess === s) this.correct++; }
+    const r = this.T[this.prev];
+    for (let i = 0; i < 9; i++) r[i] = PRIOR + (r[i] - PRIOR) * DECAY;
+    r[s] += 1;
+    this.raw[this.prev][s]++; this.n[this.prev]++; this.hist[s]++;
+    this.prev = s;
+    this.guess = this.best(s);
+  }
+  row(s) { const r = this.T[s]; let t = 0; for (const v of r) t += v; return r.map(v => v / t); }
+  best(s) { const r = this.T[s]; let b = 0; for (let i = 1; i < 9; i++) if (r[i] > r[b]) b = i; return b; }
+  confidence() { return Math.max(...this.row(this.prev)); }
+  accuracy() { return this.preds ? this.correct / this.preds : 0; }
+  // Normalised Shannon entropy (0 = fully predictable, 1 = pure chaos)
+  entropy() {
+    let hs = 0, tot = 0;
+    for (let s = 0; s < 9; s++) {
+      if (!this.n[s]) continue;
+      let h = 0; for (const p of this.row(s)) if (p > 0) h -= p * Math.log2(p);
+      const w = Math.min(this.n[s], 60); hs += h * w; tot += w;
+    }
+    return tot ? hs / tot / Math.log2(9) : 1;
+  }
+  // The velocity it EXPECTS from you, based only on your learned habits
+  expectedVel() {
+    const p = this.row(this.prev); let vx = 0, vy = 0;
+    for (let i = 1; i < 9; i++) { vx += p[i] * DIRS[i][0]; vy += p[i] * DIRS[i][1]; }
+    return [vx * SPEED, vy * SPEED];
+  }
+}
+
+// ---------- The mystery: 6 recordings ----------
+const LOGS = [
+  'LOG 1: 3:12 AM. Every sound in the city stopped at once. Cars, birds, people. Silence.',
+  'LOG 2: The silence is not empty. Something inside it is listening to us.',
+  'LOG 3: It learned our footsteps first. Then our habits. It knew where we would run before we did.',
+  'LOG 4: Every time someone called for help, it came faster. It hunts sound. Some walls sound hollow...',
+  'LOG 5 [HIDDEN]: We built the Resonator at the city centre. 6 recordings will tune it loud enough to break the silence.',
+  'LOG 6 [HIDDEN]: The truth. We did not find it. We BUILT it. The city listening network. It never stopped learning.'
+];
+
+// ---------- World helpers ----------
+function circRect(cx, cy, r, R) {
+  const nx = clamp(cx, R.x, R.x + R.w), ny = clamp(cy, R.y, R.y + R.h);
+  const ddx = cx - nx, ddy = cy - ny;
+  return ddx * ddx + ddy * ddy < r * r ? [ddx, ddy, nx, ny] : null;
+}
+const rectDist = (x, y, R) => Math.hypot(x - clamp(x, R.x, R.x + R.w), y - clamp(y, R.y, R.y + R.h));
+function inRock(x, y, r = 0) { return G.rocks.some(R => circRect(x, y, r, R)); }
+function pushOut(o, r) {
+  for (const R of G.rocks) {
+    const c = circRect(o.x, o.y, r, R);
+    if (!c) continue;
+    const d = Math.hypot(c[0], c[1]);
+    if (d < 1e-6) {
+      const l = o.x - R.x, ri = R.x + R.w - o.x, t = o.y - R.y, b = R.y + R.h - o.y, m = Math.min(l, ri, t, b);
+      if (m === l) o.x = R.x - r; else if (m === ri) o.x = R.x + R.w + r; else if (m === t) o.y = R.y - r; else o.y = R.y + R.h + r;
+    } else { o.x = c[2] + c[0] / d * r; o.y = c[3] + c[1] / d * r; }
+  }
+}
+// City blocks. The first 2 are hollow (breakable) and hide a recording.
+function genRocks() {
+  const rocks = []; let tries = 0;
+  while (rocks.length < 12 && tries++ < 800) {
+    const big = rocks.length < 2;
+    const w = big ? rand(70, 100) : rand(40, 120), h = big ? rand(56, 80) : rand(30, 90);
+    const x = rand(30, W - 30 - w), y = rand(TOP + 30, H - 30 - h);
+    if (dist(x + w / 2, y + h / 2, W / 2, H / 2) < 170) continue;
+    if (rocks.some(R => x < R.x + R.w + 46 && x + w + 46 > R.x && y < R.y + R.h + 46 && y + h + 46 > R.y)) continue;
+    const R = { x, y, w, h, seen: -99, hollow: big, cracks: [] };
+    if (big) for (let i = 0; i < 5; i++) {
+      let cx = R.x + rand(10, w - 10), cy = R.y + rand(10, h - 10); const seg = [[cx, cy]];
+      for (let k = 0; k < 3; k++) { cx = clamp(cx + rand(-14, 14), R.x + 3, R.x + w - 3); cy = clamp(cy + rand(-14, 14), R.y + 3, R.y + h - 3); seg.push([cx, cy]); }
+      R.cracks.push(seg);
+    }
+    rocks.push(R);
+  }
+  return rocks;
+}
+function freeSpot(r, minFromPlayer, others = [], minBetween = 0) {
+  let x = W / 2, y = H / 2;
+  for (let k = 0; k < 300; k++) {
+    x = rand(30, W - 30); y = rand(TOP + 30, H - 30);
+    if (inRock(x, y, r + 8)) continue;
+    if (dist(x, y, W / 2, H / 2) < 90) continue;
+    if (G.p && dist(x, y, G.p.x, G.p.y) < minFromPlayer) continue;
+    if (others.some(o => dist(x, y, o.x, o.y) < minBetween)) continue;
+    return { x, y };
+  }
+  return { x, y };
+}
+function farPoint() {
+  const c = [[40, TOP + 40], [W - 40, TOP + 40], [40, H - 40], [W - 40, H - 40], [W / 2, TOP + 40], [W / 2, H - 40]];
+  c.sort((a, b) => dist(b[0], b[1], G.p.x, G.p.y) - dist(a[0], a[1], G.p.x, G.p.y));
+  return c[Math.floor(rand(0, 2))];
+}
+const vis = seen => clamp(1 - (G.t - seen) / REVEAL, 0, 1);
+const near = (x, y, r = 70) => clamp(1 - dist(x, y, G.p.x, G.p.y) / r, 0, 1);
+
+// ---------- Game state ----------
+let G = null, state = 'menu';
+let best = 0;
+try { best = +localStorage.getItem('echo_best') || 0; } catch (e) {}
+
+function newGame() {
+  G = {
+    t: 0, score: 0, wave: 1, waveT: 0, diff: 1, lastHit: -99, shake: 0, know: 0,
+    p: null, rocks: [], en: [], bl: [], pt: [], warn: [], pop: [], logs: [], pulses: [],
+    found: [], secrets: 0, won: false, lore: null, pulseCD: 0, pulseTimes: [],
+    resonator: { x: W / 2, y: H / 2, on: false, a: 0 },
+    belief: { x: W / 2, y: H / 2 }, heardT: -99,
+    brain: new Brain(), sampleT: 0, tlT: 0, tl: [], hbT: 0,
+    heat: new Float32Array(HX * HY),
+    spawnT: 7, banner: { text: 'PRESS SPACE TO SEE', t: 3 },
+    kills: 0, nearMiss: 0, dashes: 0,
+    ms: [{ v: 0.3, text: 'IT IS LEARNING YOU' }, { v: 0.5, text: 'IT UNDERSTANDS YOU' }, { v: 0.7, text: 'IT KNOWS YOU' }],
+    ent: { x: 0, y: 0, r: 18, on: false, stun: 0, seen: -99 }
+  };
+  G.rocks = genRocks();
+  G.p = { x: W / 2, y: H / 2 + 50, vx: 0, vy: 0, ix: 0, iy: 0, r: 8, hp: 5, inv: 1, dash: 0, dashCD: 0, ldx: 1, ldy: 0, trail: [] };
+  // 4 recordings in the open, 2 sealed inside hollow walls
+  for (let i = 0; i < 4; i++) { const s = freeSpot(12, 160, G.logs, 160); G.logs.push({ x: s.x, y: s.y, a: rand(0, 6), id: i, seen: -99 }); }
+  const hollow = G.rocks.filter(R => R.hollow);
+  hollow.forEach((R, k) => G.logs.push({ x: R.x + R.w / 2, y: R.y + R.h / 2, a: 0, id: 4 + k, seen: -99, sealed: R }));
+  // safety: if fewer than 2 hollow walls were generated, place the rest in the open
+  for (let id = 4 + hollow.length; id < 6; id++) { const s = freeSpot(12, 160, G.logs, 120); G.logs.push({ x: s.x, y: s.y, a: 0, id, seen: -99 }); }
+  const [fx, fy] = farPoint(); G.ent.x = fx; G.ent.y = fy;
+}
+
+const mult = () => 1 + Math.round(G.brain.entropy() * 20) / 10;
+
+// ---------- Input ----------
+const keys = {};
+const touch = { active: false, sx: 0, sy: 0, dx: 0, dy: 0, t0: 0, moved: false, lastTap: 0 };
+addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
+  if (state === 'menu' && (e.code === 'Enter' || e.code === 'Space')) start();
+  else if (state === 'play') {
+    if (e.code === 'Space') pulse();
+    if (e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'KeyK') tryDash();
+    if (e.code === 'KeyJ') state = 'journal';
+    if (e.code === 'KeyP' || e.code === 'Escape') state = 'pause';
+  } else if ((state === 'pause' || state === 'journal') && ['KeyP', 'Escape', 'Enter', 'KeyJ'].includes(e.code)) state = 'play';
+  else if (state === 'over' && (e.code === 'KeyR' || e.code === 'Enter')) start();
+});
+addEventListener('keyup', e => keys[e.code] = false);
+addEventListener('blur', () => { for (const k in keys) keys[k] = false; if (state === 'play') state = 'pause'; });
+
+cv.addEventListener('pointerdown', e => {
+  if (e.pointerType === 'mouse') { if (state === 'play') pulse(); return; }
+  Object.assign(touch, { active: true, sx: e.clientX, sy: e.clientY, dx: 0, dy: 0, t0: performance.now(), moved: false });
+});
+cv.addEventListener('pointermove', e => {
+  if (!touch.active) return;
+  const mx = e.clientX - touch.sx, my = e.clientY - touch.sy;
+  if (Math.hypot(mx, my) > 18) { touch.moved = true; const s = stateOf(mx, my); touch.dx = DIRS[s][0]; touch.dy = DIRS[s][1]; }
+  else { touch.dx = touch.dy = 0; }
+});
+cv.addEventListener('pointerup', () => {
+  if (!touch.active) return;
+  const now = performance.now();
+  if (state === 'play' && !touch.moved && now - touch.t0 < 250) {
+    if (now - touch.lastTap < 320) tryDash(); else pulse();
+    touch.lastTap = now;
+  }
+  touch.active = false; touch.dx = touch.dy = 0;
+});
+
+function inputDir() {
+  let x = 0, y = 0;
+  if (keys.KeyA || keys.ArrowLeft) x--;
+  if (keys.KeyD || keys.ArrowRight) x++;
+  if (keys.KeyW || keys.ArrowUp) y--;
+  if (keys.KeyS || keys.ArrowDown) y++;
+  if (touch.active && (touch.dx || touch.dy)) { x = touch.dx; y = touch.dy; }
+  const L = Math.hypot(x, y);
+  return L ? [x / L, y / L] : [0, 0];
+}
+
+// ---------- Actions ----------
+function pulse() {
+  if (G.pulseCD > 0) return;
+  const p = G.p;
+  G.pulseCD = PULSE_CD;
+  G.pulses.push({ x: p.x, y: p.y, r: 0, prev: 0 });
+  G.pulseTimes.push(G.t);
+  // IT HEARS YOU: its guess snaps to your real position
+  G.belief.x = p.x; G.belief.y = p.y; G.heardT = G.t;
+  for (const e of G.en) if (e.type === 'watcher' && e.charge <= 0 && dist(e.x, e.y, p.x, p.y) < 480) e.charge = 0.55;
+  sfx(1200, 0.35, 'sine', 0.06, -900);
+  sfx(600, 0.5, 'sine', 0.03, -400, 0.05);
+}
+function tryDash() {
+  const p = G.p;
+  if (p.dashCD > 0) return;
+  p.dash = 0.16; p.dashCD = 1.1; p.inv = Math.max(p.inv, 0.25); G.dashes++;
+  sfx(220, 0.15, 'sawtooth', 0.04, 500);
+  burst(p.x, p.y, '#3ef0ff', 10, 120);
+}
+
+// Where it thinks you will be, starting from its current GUESS (not your real position)
+function predictFromBelief(ox, oy, projSpeed, maxT = 1.2) {
+  const [vx, vy] = G.brain.expectedVel();
+  const skill = clamp(0.5 + 0.2 * G.diff, 0, 1);
+  let tx = G.belief.x, ty = G.belief.y;
+  for (let k = 0; k < 3; k++) {
+    const t = Math.min(maxT, dist(tx, ty, ox, oy) / projSpeed);
+    tx = G.belief.x + vx * t * skill; ty = G.belief.y + vy * t * skill;
+  }
+  return [clamp(tx, 10, W - 10), clamp(ty, TOP + 10, H - 10)];
+}
+
+// ---------- Spawning ----------
+function spawnEnemy() {
+  const crawlerChance = Math.min(0.65, 0.35 + G.wave * 0.06);
+  const type = Math.random() < crawlerChance ? 'crawler' : 'watcher';
+  let x, y, k = 0;
+  do {
+    const side = Math.floor(rand(0, 4));
+    x = side < 2 ? rand(40, W - 40) : (side === 2 ? 40 : W - 40);
+    y = side >= 2 ? rand(TOP + 30, H - 40) : (side === 0 ? TOP + 30 : H - 40);
+  } while ((dist(x, y, G.p.x, G.p.y) < 240 || inRock(x, y, 20)) && ++k < 20);
+  G.warn.push({ x, y, t: 1.2, type });
+}
+function materialise(w) {
+  const e = { type: w.type, x: w.x, y: w.y, vx: 0, vy: 0, age: 0, ph: rand(0, 6), ang: 0, seen: -99 };
+  if (w.type === 'watcher') Object.assign(e, { r: 12, life: rand(14, 18), charge: 0, aim: [w.x, w.y] });
+  else Object.assign(e, { r: 10, life: rand(13, 17) });
+  G.en.push(e);
+}
+
+// ---------- FX ----------
+function burst(x, y, col, n, sp) {
+  for (let i = 0; i < n; i++) {
+    const a = rand(0, Math.PI * 2), s = rand(sp * 0.3, sp);
+    G.pt.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: rand(0.3, 0.7), max: 0.7, col, sz: rand(2, 4) });
+  }
+}
+function popup(x, y, text, col = '#ffe14d') { G.pop.push({ x, y, text, col, t: 1.2 }); }
+
+// ---------- Combat ----------
+function fire(e) {
+  const sp = 280 + 30 * G.diff;
+  const [tx, ty] = e.aim;
+  const a = Math.atan2(ty - e.y, tx - e.x);
+  const spread = G.wave >= 3 && Math.random() < 0.4 ? [-0.18, 0, 0.18] : [0];
+  for (const s of spread) G.bl.push({ x: e.x, y: e.y, vx: Math.cos(a + s) * sp, vy: Math.sin(a + s) * sp, r: 5, near: false });
+  sfx(980, 0.08, 'square', 0.03, -600);
+}
+function hurt(msg = 'FOUND YOU') {
+  const p = G.p;
+  if (p.inv > 0 || p.dash > 0) return false;
+  p.hp--; p.inv = 1.3; G.shake = 14; G.lastHit = G.t;
+  G.diff = Math.max(0.7, G.diff - 0.2); // adaptive difficulty: ease off after a hit
+  burst(p.x, p.y, '#ff2e63', 26, 260);
+  sfx(140, 0.35, 'sawtooth', 0.08, -90);
+  popup(p.x, p.y - 20, msg, '#ff2e63');
+  if (p.hp <= 0) endGame(false);
+  return true;
+}
+function kill(e) {
+  e.dead = true; G.kills++;
+  const pts = Math.round(50 * mult());
+  G.score += pts; G.shake = Math.max(G.shake, 6);
+  burst(e.x, e.y, e.type === 'watcher' ? '#ff3ef0' : '#ff8a1a', 24, 240);
+  popup(e.x, e.y - 16, '+' + pts);
+  sfx(520, 0.12, 'square', 0.05, 700);
+}
+
+// ---------- Update ----------
+function update(dt) {
+  const p = G.p, b = G.brain;
+  G.t += dt;
+  G.pulseCD -= dt;
+
+  // player movement
+  const [mx0, my0] = inputDir();
+  if (mx0 || my0) { p.ldx = mx0; p.ldy = my0; }
+  p.ix = mx0 * SPEED; p.iy = my0 * SPEED;
+  p.dashCD -= dt; p.inv -= dt;
+  let sp = SPEED, mx = mx0, my = my0;
+  if (p.dash > 0) { p.dash -= dt; sp = 740; if (!mx0 && !my0) { mx = p.ldx; my = p.ldy; } }
+  p.vx = mx * sp; p.vy = my * sp;
+  p.x = clamp(p.x + p.vx * dt, p.r, W - p.r);
+  p.y = clamp(p.y + p.vy * dt, TOP + p.r, H - p.r);
+  // dashing into a hollow wall breaks it open
+  if (p.dash > 0) for (const R of G.rocks) if (R.hollow && circRect(p.x, p.y, p.r + 5, R)) breakWall(R);
+  G.rocks = G.rocks.filter(R => !R.broken);
+  pushOut(p, p.r);
+  p.trail.push([p.x, p.y]); if (p.trail.length > 12) p.trail.shift();
+
+  // it hears your footsteps (direction only) 5x per second and learns
+  G.sampleT -= dt;
+  if (G.sampleT <= 0) {
+    G.sampleT = 0.2;
+    b.observe(stateOf(mx0, my0));
+    const hx = clamp(Math.floor(p.x / W * HX), 0, HX - 1), hy = clamp(Math.floor(p.y / H * HY), 0, HY - 1);
+    G.heat[hy * HX + hx]++;
+  }
+  G.tlT -= dt;
+  if (G.tlT <= 0) { G.tlT = 2; G.tl.push({ t: G.t, ent: b.entropy(), acc: b.accuracy() }); }
+
+  // ITS GUESS: between pulses it moves its guess using your learned habits
+  const [evx, evy] = b.expectedVel();
+  G.belief.x = clamp(G.belief.x + evx * dt * 0.95, 10, W - 10);
+  G.belief.y = clamp(G.belief.y + evy * dt * 0.95, TOP + 10, H - 10);
+  if (G.ent.on && dist(G.ent.x, G.ent.y, p.x, p.y) < 90) { G.belief.x = p.x; G.belief.y = p.y; } // too close: it senses you
+
+  // echo pulses expand and reveal whatever they touch
+  for (const pu of G.pulses) {
+    pu.prev = pu.r; pu.r += PULSE_SPEED * dt;
+    const hit = d => d >= pu.prev - 4 && d < pu.r;
+    for (const R of G.rocks) if (hit(rectDist(pu.x, pu.y, R))) R.seen = G.t;
+    for (const e of G.en) if (hit(dist(pu.x, pu.y, e.x, e.y) - e.r)) e.seen = G.t;
+    for (const l of G.logs) if (!l.sealed && hit(dist(pu.x, pu.y, l.x, l.y))) l.seen = G.t;
+    if (G.ent.on && hit(dist(pu.x, pu.y, G.ent.x, G.ent.y) - G.ent.r)) G.ent.seen = G.t;
+  }
+  G.pulses = G.pulses.filter(pu => pu.r < PULSE_MAX);
+
+  // adaptive difficulty
+  G.diff = Math.min(3, G.diff + dt * 0.012 * (G.t - G.lastHit > 8 ? 1.6 : 0.6));
+  G.waveT += dt;
+  if (G.waveT > 25) {
+    G.wave++; G.waveT = 0; G.banner = { text: 'THE SILENCE GROWS', t: 2 };
+    if (p.hp < 5) { p.hp++; popup(p.x, p.y - 24, '+1 HP', '#3eff8a'); }
+  }
+
+  // spawn
+  G.spawnT -= dt;
+  if (G.spawnT <= 0) {
+    G.spawnT = Math.max(1.2, 4.2 - G.diff * 0.8);
+    if (G.en.length + G.warn.length < 2 + G.wave * 1.3) spawnEnemy();
+  }
+  for (const w of G.warn) { w.t -= dt; if (w.t <= 0) { materialise(w); w.done = true; } }
+  G.warn = G.warn.filter(w => !w.done);
+
+  updateListener(dt);
+
+  // minions hunt its GUESS, not your real position
+  for (const e of G.en) {
+    e.age += dt;
+    if (e.type === 'watcher') {
+      e.x = clamp(e.x + Math.cos(e.age * 0.7 + e.ph) * 12 * dt, 20, W - 20);
+      e.y = clamp(e.y + Math.sin(e.age * 0.9 + e.ph) * 12 * dt, TOP + 16, H - 20);
+      if (e.charge > 0) {
+        e.charge -= dt; e.seen = G.t;
+        e.aim = predictFromBelief(e.x, e.y, 280 + 30 * G.diff);
+        if (e.charge <= 0) fire(e);
+      }
+    } else {
+      const hs = 85 + 24 * G.diff + (G.t - G.heardT < 1.5 ? 50 : 0);
+      const [tx, ty] = predictFromBelief(e.x, e.y, hs, 0.8);
+      const a = Math.atan2(ty - e.y, tx - e.x), k = Math.min(1, dt * 2.5);
+      e.vx = lerp(e.vx, Math.cos(a) * hs, k); e.vy = lerp(e.vy, Math.sin(a) * hs, k);
+      e.x += e.vx * dt; e.y += e.vy * dt; e.ang = Math.atan2(e.vy, e.vx);
+      pushOut(e, e.r);
+    }
+    if (dist(e.x, e.y, p.x, p.y) < e.r + p.r + (p.dash > 0 ? 6 : 0)) {
+      if (p.dash > 0) kill(e);
+      else if (e.type === 'crawler') { e.dead = true; burst(e.x, e.y, '#ff8a1a', 12, 160); hurt(); }
+    }
+    if (e.age > e.life && !e.dead) e.dead = true;
+  }
+  G.en = G.en.filter(e => !e.dead);
+
+  // projectiles (walls block them)
+  for (const bl of G.bl) {
+    bl.x += bl.vx * dt; bl.y += bl.vy * dt;
+    if (inRock(bl.x, bl.y, 2)) { bl.dead = true; burst(bl.x, bl.y, '#ff8fb0', 5, 80); continue; }
+    const d = dist(bl.x, bl.y, p.x, p.y);
+    if (d < bl.r + p.r - 1) {
+      if (p.inv <= 0 && p.dash <= 0) { bl.dead = true; hurt('HEARD YOU'); }
+    } else if (d < bl.r + p.r + 16 && !bl.near && p.inv <= 0) {
+      bl.near = true; G.nearMiss++;
+      const pts = Math.round(5 * mult()); G.score += pts; popup(p.x, p.y - 18, 'CLOSE +' + pts, '#3ef0ff');
+    }
+    if (bl.x < -20 || bl.x > W + 20 || bl.y < -20 || bl.y > H + 20) bl.dead = true;
+  }
+  G.bl = G.bl.filter(x => !x.dead);
+
+  // recordings
+  for (const l of G.logs) {
+    l.a += dt * 2;
+    if (!l.sealed && dist(l.x, l.y, p.x, p.y) < p.r + 13) {
+      l.dead = true; G.found.push(l.id);
+      const pts = Math.round(150 * mult()); G.score += pts;
+      popup(l.x, l.y - 18, 'RECORDING +' + pts, '#ffe14d'); burst(l.x, l.y, '#ffe14d', 26, 200);
+      G.lore = { text: LOGS[l.id], t: 7 };
+      [523, 659, 784].forEach((f, i) => sfx(f, 0.18, 'triangle', 0.05, 0, i * 0.09));
+      if (G.found.length === 6) {
+        G.resonator.on = true; G.banner = { text: 'RETURN TO THE RESONATOR', t: 3 };
+        sfx(196, 0.9, 'sawtooth', 0.05, 400);
+      }
+    }
+  }
+  G.logs = G.logs.filter(x => !x.dead);
+
+  // the resonator (win)
+  G.resonator.a += dt;
+  if (G.resonator.on && dist(G.resonator.x, G.resonator.y, p.x, p.y) < 30) {
+    G.won = true; G.score += 1000 + p.hp * 100; endGame(true); return;
+  }
+
+  G.score += dt * 2 * mult();
+
+  for (const q of G.pt) { q.x += q.vx * dt; q.y += q.vy * dt; q.vx *= 0.92; q.vy *= 0.92; q.life -= dt; }
+  G.pt = G.pt.filter(q => q.life > 0);
+  for (const q of G.pop) { q.y -= 26 * dt; q.t -= dt; }
+  G.pop = G.pop.filter(q => q.t > 0);
+  if (G.banner.t > 0) G.banner.t -= dt;
+  if (G.lore && (G.lore.t -= dt) <= 0) G.lore = null;
+  G.shake = Math.max(0, G.shake - dt * 40);
+}
+
+function breakWall(R) {
+  R.broken = true; G.secrets++;
+  for (const l of G.logs) if (l.sealed === R) { l.sealed = null; l.seen = G.t; }
+  burst(R.x + R.w / 2, R.y + R.h / 2, '#ffe14d', 40, 280);
+  popup(R.x + R.w / 2, R.y - 6, 'SECRET FOUND +200', '#ffe14d');
+  G.score += 200; G.shake = 12;
+  sfx(90, 0.4, 'sawtooth', 0.08, -50); sfx(1400, 0.3, 'triangle', 0.04, -800, 0.1);
+}
+
+// The Listener: hunts its guess of where you are. Grows as it learns you.
+function updateListener(dt) {
+  const E = G.ent, p = G.p, b = G.brain;
+  if (!E.on) {
+    if (G.t > 5) { E.on = true; G.banner = { text: 'SOMETHING HEARD YOU', t: 2.5 }; sfx(60, 1.4, 'sawtooth', 0.06, -25); }
+    return;
+  }
+  G.know = lerp(G.know, b.accuracy(), Math.min(1, dt * 0.6));
+  E.r = 16 + 24 * G.know;
+  for (const m of G.ms) if (!m.done && G.know >= m.v) {
+    m.done = true; G.banner = { text: m.text, t: 2.5 }; G.shake = 6;
+    sfx(80, 0.9, 'sawtooth', 0.07, -40);
+  }
+  const d = dist(E.x, E.y, p.x, p.y);
+  if (E.stun > 0) E.stun -= dt;
+  else {
+    const alerted = G.t - G.heardT < 2;
+    const sp = 45 + 65 * G.know + 10 * G.diff + (alerted ? 55 : 0);
+    let [tx, ty] = predictFromBelief(E.x, E.y, sp, 1.0);
+    if (dist(tx, ty, E.x, E.y) < 12) { tx += Math.cos(G.t * 1.7) * 60; ty += Math.sin(G.t * 1.3) * 60; } // searching
+    const a = Math.atan2(ty - E.y, tx - E.x);
+    E.x = clamp(E.x + Math.cos(a) * sp * dt, 10, W - 10); E.y = clamp(E.y + Math.sin(a) * sp * dt, TOP + 10, H - 10);
+    if (d < E.r * 0.8 + p.r) {
+      if (p.dash > 0) {
+        E.stun = 1.5; const k = Math.atan2(E.y - p.y, E.x - p.x);
+        E.x = clamp(E.x + Math.cos(k) * 90, 20, W - 20); E.y = clamp(E.y + Math.sin(k) * 90, TOP + 20, H - 20);
+        E.seen = G.t; popup(E.x, E.y - E.r - 8, 'STUNNED', '#3ef0ff'); G.shake = 8; sfx(300, 0.2, 'square', 0.05, -200);
+      } else if (hurt('IT FOUND YOU')) {
+        burst(E.x, E.y, '#ff2e63', 30, 260);
+        const [fx, fy] = farPoint(); E.x = fx; E.y = fy; E.stun = 2;
+      }
+    }
+  }
+  // heartbeat when it is close
+  G.hbT -= dt;
+  if (d < 330 && G.hbT <= 0) {
+    G.hbT = 0.28 + d / 330 * 0.9;
+    sfx(58, 0.14, 'sine', 0.16); sfx(48, 0.12, 'sine', 0.12, 0, 0.12);
+  }
+}
+
+// ---------- Render ----------
+function glow(col, blur) { ctx.shadowColor = col; ctx.shadowBlur = blur; }
+function noGlow() { ctx.shadowBlur = 0; }
+function grid(alpha) {
+  ctx.strokeStyle = `rgba(62,240,255,${alpha})`; ctx.lineWidth = 1; ctx.beginPath();
+  for (let x = 0; x <= W; x += 32) { ctx.moveTo(x, 0); ctx.lineTo(x, H); }
+  for (let y = 0; y <= H; y += 32) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
+  ctx.stroke();
+}
+function wrap(text, maxW) {
+  const words = text.split(' '), lines = []; let line = '';
+  for (const w of words) {
+    const test = line ? line + ' ' + w : w;
+    if (ctx.measureText(test).width > maxW && line) { lines.push(line); line = w; } else line = test;
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
+function render() {
+  ctx.save();
+  if (G && G.shake > 0) ctx.translate(rand(-G.shake, G.shake), rand(-G.shake, G.shake));
+  ctx.fillStyle = '#020207'; ctx.fillRect(-20, -20, W + 40, H + 40);
+  if (G) drawWorld();
+  ctx.restore();
+  if (G && state !== 'menu') drawHUD();
+  if (state === 'pause') overlayText('PAUSED', 'PRESS P TO RESUME');
+  if (state === 'journal') drawJournal();
+}
+function overlayText(a, b) {
+  ctx.fillStyle = 'rgba(1,1,4,.75)'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#ffe14d'; ctx.font = FONT(28); ctx.textAlign = 'center';
+  ctx.fillText(a, W / 2, H / 2);
+  ctx.font = FONT(10); ctx.fillStyle = '#6aa9bb'; ctx.fillText(b, W / 2, H / 2 + 36);
+}
+
+function drawWorld() {
+  const p = G.p;
+  // sonar floor: grid visible only inside each expanding ring, and around you
+  for (const pu of G.pulses) {
+    const a = 1 - pu.r / PULSE_MAX;
+    ctx.save(); ctx.beginPath();
+    ctx.arc(pu.x, pu.y, pu.r, 0, Math.PI * 2); ctx.arc(pu.x, pu.y, Math.max(0, pu.r - 46), 0, Math.PI * 2, true);
+    ctx.clip(); grid(0.28 * a); ctx.restore();
+  }
+  ctx.save(); ctx.beginPath(); ctx.arc(p.x, p.y, 54, 0, Math.PI * 2); ctx.clip(); grid(0.1); ctx.restore();
+  const g = ctx.createRadialGradient(p.x, p.y, 4, p.x, p.y, 60);
+  g.addColorStop(0, 'rgba(62,240,255,.14)'); g.addColorStop(1, 'rgba(62,240,255,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(p.x, p.y, 60, 0, Math.PI * 2); ctx.fill();
+
+  // walls: only seen by echo (or when right next to you)
+  for (const R of G.rocks) {
+    const cx = clamp(p.x, R.x, R.x + R.w), cy = clamp(p.y, R.y, R.y + R.h);
+    const a = Math.max(vis(R.seen), near(cx, cy, 60));
+    if (a <= 0.01) continue;
+    ctx.globalAlpha = a;
+    ctx.fillStyle = '#06222c'; ctx.fillRect(R.x, R.y, R.w, R.h);
+    glow('#3ef0ff', 10 * a); ctx.strokeStyle = '#3ef0ff'; ctx.lineWidth = 2; ctx.strokeRect(R.x + 1, R.y + 1, R.w - 2, R.h - 2); noGlow();
+    if (R.hollow) {
+      ctx.strokeStyle = '#ffe14d'; ctx.lineWidth = 1.5;
+      for (const seg of R.cracks) { ctx.beginPath(); seg.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.stroke(); }
+      ctx.fillStyle = '#ffe14d'; ctx.font = FONT(6); ctx.textAlign = 'center';
+      ctx.fillText('HOLLOW', R.x + R.w / 2, R.y + R.h / 2 + 3);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // resonator at the centre (always faintly visible: it is your goal)
+  const Rz = G.resonator;
+  ctx.globalAlpha = Rz.on ? 1 : 0.35 + 0.6 * vis(G.pulses.length ? G.t - 0.5 : -99);
+  for (let i = 0; i < 3; i++) {
+    ctx.strokeStyle = Rz.on ? `hsla(${(Rz.a * 140 + i * 50) % 360},100%,65%,${0.9 - i * 0.2})` : '#2f6a7a';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(Rz.x, Rz.y, 10 + i * 8 + (Rz.on ? Math.sin(Rz.a * 5 + i) * 3 : 0), 0, Math.PI * 2); ctx.stroke();
+  }
+  ctx.fillStyle = Rz.on ? '#fff' : '#2f6a7a'; ctx.fillRect(Rz.x - 3, Rz.y - 3, 6, 6);
+  ctx.globalAlpha = 1;
+
+  // recordings
+  for (const l of G.logs) {
+    if (l.sealed) continue;
+    const a = Math.max(vis(l.seen), near(l.x, l.y, 80));
+    if (a <= 0.01) continue;
+    ctx.globalAlpha = a;
+    ctx.save(); ctx.translate(l.x, l.y);
+    glow('#ffe14d', 16); ctx.strokeStyle = '#ffe14d'; ctx.lineWidth = 2;
+    ctx.rotate(l.a); ctx.strokeRect(-8, -8, 16, 16);
+    ctx.rotate(-l.a * 2); ctx.fillStyle = '#fff6c2'; ctx.fillRect(-3, -3, 6, 6);
+    ctx.restore(); noGlow();
+    ctx.globalAlpha = 1;
+  }
+
+  // spawn warnings (you hear them arrive)
+  for (const w of G.warn) {
+    ctx.strokeStyle = w.type === 'watcher' ? '#ff3ef0' : '#ff8a1a';
+    ctx.globalAlpha = 0.25 + 0.4 * Math.abs(Math.sin(w.t * 14));
+    ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(w.x, w.y, 24 * (1.2 - w.t) + 4, 0, Math.PI * 2); ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  // minions (seen by echo, or close)
+  for (const e of G.en) {
+    const a = Math.max(vis(e.seen), near(e.x, e.y, 110));
+    if (e.type === 'watcher' && e.charge > 0) {
+      ctx.strokeStyle = `rgba(255,46,99,${0.9 - e.charge})`; ctx.lineWidth = 1; ctx.setLineDash([6, 6]);
+      ctx.beginPath(); ctx.moveTo(e.x, e.y); ctx.lineTo(e.aim[0], e.aim[1]); ctx.stroke(); ctx.setLineDash([]);
+    }
+    if (a <= 0.01) continue;
+    ctx.globalAlpha = a;
+    if (e.type === 'watcher') {
+      ctx.save(); ctx.translate(e.x, e.y); ctx.rotate(e.age * 2);
+      glow('#ff3ef0', 14); ctx.fillStyle = e.charge > 0 ? '#ffffff' : '#ff3ef0';
+      ctx.fillRect(-8, -8, 16, 16); ctx.fillStyle = '#020207'; ctx.fillRect(-3, -3, 6, 6);
+      ctx.restore();
+    } else {
+      ctx.save(); ctx.translate(e.x, e.y); ctx.rotate(e.ang);
+      glow('#ff8a1a', 14); ctx.fillStyle = '#ff8a1a';
+      ctx.beginPath(); ctx.moveTo(13, 0); ctx.lineTo(-9, -9); ctx.lineTo(-4, 0); ctx.lineTo(-9, 9); ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+    noGlow(); ctx.globalAlpha = 1;
+  }
+
+  // projectiles always glow
+  glow('#ff2e63', 12); ctx.fillStyle = '#ffd0dc';
+  for (const b of G.bl) { ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2); ctx.fill(); }
+  noGlow();
+
+  drawListener();
+
+  // ITS GUESS of where you are
+  if (state !== 'over' && G.ent.on) {
+    const B = G.belief, c = G.brain.confidence();
+    ctx.strokeStyle = `rgba(255,46,99,${0.3 + c * 0.5})`; ctx.lineWidth = 2;
+    ctx.setLineDash([4, 4]); ctx.beginPath(); ctx.arc(B.x, B.y, 15 + Math.sin(G.t * 6) * 2, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(B.x - 6, B.y); ctx.lineTo(B.x + 6, B.y); ctx.moveTo(B.x, B.y - 6); ctx.lineTo(B.x, B.y + 6); ctx.stroke();
+    ctx.fillStyle = `rgba(255,46,99,${0.4 + c * 0.5})`; ctx.font = FONT(6); ctx.textAlign = 'center';
+    ctx.fillText('ITS GUESS', B.x, B.y - 22);
+  }
+
+  // pulse rings
+  for (const pu of G.pulses) {
+    const a = 1 - pu.r / PULSE_MAX;
+    glow('#3ef0ff', 14 * a); ctx.strokeStyle = `rgba(62,240,255,${a})`; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(pu.x, pu.y, pu.r, 0, Math.PI * 2); ctx.stroke(); noGlow();
+  }
+
+  // player
+  if (state !== 'over') {
+    p.trail.forEach(([x, y], i) => {
+      ctx.globalAlpha = (i / p.trail.length) * (p.dash > 0 ? 0.7 : 0.25);
+      ctx.fillStyle = '#3ef0ff'; const s = 3 + i * 0.5; ctx.fillRect(x - s / 2, y - s / 2, s, s);
+    });
+    ctx.globalAlpha = 1;
+    const blink = p.inv > 0 && p.dash <= 0 && Math.floor(G.t * 20) % 2;
+    if (!blink) {
+      glow('#3ef0ff', 18); ctx.fillStyle = p.dash > 0 ? '#ffffff' : '#3ef0ff';
+      ctx.fillRect(p.x - p.r, p.y - p.r, p.r * 2, p.r * 2);
+      ctx.fillStyle = '#020207'; ctx.fillRect(p.x - 2, p.y - 2, 4, 4); noGlow();
+    }
+    // pulse cooldown ring
+    if (G.pulseCD > 0) {
+      ctx.strokeStyle = '#3ef0ff66'; ctx.lineWidth = 2; ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r + 6, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (1 - G.pulseCD / PULSE_CD)); ctx.stroke();
+    }
+    if (G.resonator.on) {
+      const a = Math.atan2(G.resonator.y - p.y, G.resonator.x - p.x);
+      ctx.save(); ctx.translate(p.x + Math.cos(a) * 28, p.y + Math.sin(a) * 28); ctx.rotate(a);
+      ctx.fillStyle = '#ffe14d'; ctx.beginPath(); ctx.moveTo(7, 0); ctx.lineTo(-5, -5); ctx.lineTo(-5, 5); ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  for (const q of G.pt) { ctx.globalAlpha = q.life / q.max; ctx.fillStyle = q.col; ctx.fillRect(q.x, q.y, q.sz, q.sz); }
+  ctx.globalAlpha = 1;
+  ctx.font = FONT(8); ctx.textAlign = 'center';
+  for (const q of G.pop) { ctx.globalAlpha = Math.min(1, q.t); ctx.fillStyle = q.col; ctx.fillText(q.text, q.x, q.y); }
+  ctx.globalAlpha = 1;
+  if (G.banner.t > 0) {
+    ctx.globalAlpha = Math.min(1, G.banner.t);
+    ctx.font = FONT(22); ctx.fillStyle = '#e6f7ff'; glow('#3ef0ff', 20);
+    ctx.fillText(G.banner.text, W / 2, H / 2 - 90); noGlow(); ctx.globalAlpha = 1;
+  }
+  if (G.lore) {
+    ctx.font = FONT(8);
+    const lines = wrap(G.lore.text, W - 180), bh = 18 + lines.length * 16;
+    ctx.globalAlpha = Math.min(1, G.lore.t);
+    ctx.fillStyle = 'rgba(14,10,2,.9)'; ctx.fillRect(70, H - 20 - bh, W - 140, bh);
+    ctx.strokeStyle = '#ffe14d'; ctx.lineWidth = 1; ctx.strokeRect(70, H - 20 - bh, W - 140, bh);
+    ctx.fillStyle = '#ffe14d'; ctx.textAlign = 'center';
+    lines.forEach((ln, i) => ctx.fillText(ln, W / 2, H - 20 - bh + 20 + i * 16));
+    ctx.globalAlpha = 1;
+  }
+}
+
+// The Listener: a huge ear-like eye. You only see it in your echo, or when it is very close.
+function drawListener() {
+  const E = G.ent, p = G.p;
+  if (!E.on) return;
+  const d = dist(E.x, E.y, p.x, p.y);
+  const a = Math.max(vis(E.seen), near(E.x, E.y, 170) * 0.9) * (E.stun > 0 ? 0.6 : 1);
+  if (a <= 0.01) return;
+  const hue = 190 - 190 * G.know, col = `hsl(${(hue + 360) % 360},100%,60%)`;
+  ctx.globalAlpha = a;
+  for (let i = 0; i < 10; i++) {
+    const an = G.t * (0.8 + G.know) + i * Math.PI / 5, rr = E.r * (1.4 + 0.2 * Math.sin(G.t * 3 + i));
+    ctx.fillStyle = col; ctx.fillRect(E.x + Math.cos(an) * rr - 2, E.y + Math.sin(an) * rr - 2, 4, 4);
+  }
+  // sound-wave rings around it
+  for (let i = 1; i <= 2; i++) {
+    ctx.strokeStyle = col; ctx.globalAlpha = a * 0.35; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(E.x, E.y, E.r * (1.8 + i * 0.4) + ((G.t * 30) % 12), 0, Math.PI * 2); ctx.stroke();
+  }
+  ctx.globalAlpha = a;
+  glow(col, 28);
+  ctx.fillStyle = '#04060c'; ctx.beginPath(); ctx.arc(E.x, E.y, E.r, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = col; ctx.lineWidth = 3; ctx.stroke();
+  const la = Math.atan2(G.belief.y - E.y, G.belief.x - E.x), off = E.r * 0.35;
+  const ix = E.x + Math.cos(la) * off, iy = E.y + Math.sin(la) * off;
+  ctx.fillStyle = col; ctx.beginPath(); ctx.arc(ix, iy, E.r * 0.45, 0, Math.PI * 2); ctx.fill();
+  noGlow();
+  ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(ix, iy, E.r * 0.12, E.r * 0.3, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 1;
+}
+
+function bar(x, y, w, label, v, col) {
+  ctx.fillStyle = '#6aa9bb'; ctx.font = FONT(7); ctx.textAlign = 'left';
+  ctx.fillText(label, x, y - 5);
+  ctx.fillStyle = '#0a1a22'; ctx.fillRect(x, y, w, 8);
+  ctx.fillStyle = col; ctx.fillRect(x, y, w * clamp(v, 0, 1), 8);
+  ctx.fillStyle = '#e6f7ff'; ctx.textAlign = 'right'; ctx.fillText(Math.round(v * 100) + '%', x + w + 38, y + 8);
+}
+
+function drawHUD() {
+  const p = G.p, b = G.brain;
+  ctx.fillStyle = 'rgba(2,4,8,.94)'; ctx.fillRect(0, 0, W, TOP);
+  ctx.strokeStyle = '#0f2a3a'; ctx.beginPath(); ctx.moveTo(0, TOP); ctx.lineTo(W, TOP); ctx.stroke();
+  ctx.font = FONT(12); ctx.textAlign = 'left'; ctx.fillStyle = '#ffe14d';
+  ctx.fillText(String(Math.floor(G.score)).padStart(6, '0'), 12, 28);
+  ctx.fillStyle = '#3eff8a'; ctx.font = FONT(10);
+  ctx.fillText('x' + mult().toFixed(1), 104, 28);
+  bar(170, 24, 110, 'UNPREDICTABLE', b.entropy(), '#3eff8a');
+  bar(345, 24, 110, 'IT KNOWS YOU', G.know, '#ff2e63');
+  bar(520, 24, 80, 'ECHO', 1 - clamp(G.pulseCD / PULSE_CD, 0, 1), '#3ef0ff');
+  ctx.textAlign = 'center'; ctx.font = FONT(9);
+  ctx.fillStyle = G.resonator.on ? '#3eff8a' : '#ffe14d';
+  ctx.fillText(G.resonator.on ? 'GO TO CENTRE' : 'LOGS ' + G.found.length + '/6', 720, 28);
+  for (let i = 0; i < 5; i++) {
+    ctx.fillStyle = i < p.hp ? '#ff2e63' : '#0f2a3a';
+    ctx.fillRect(W - 136 + i * 25, 16, 17, 14);
+  }
+}
+
+function drawJournal() {
+  ctx.fillStyle = 'rgba(1,1,4,.92)'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#ffe14d'; ctx.font = FONT(16); ctx.textAlign = 'center';
+  ctx.fillText('JOURNAL: RECOVERED RECORDINGS', W / 2, 70);
+  ctx.font = FONT(8); ctx.textAlign = 'left';
+  let y = 110;
+  for (let i = 0; i < 6; i++) {
+    const got = G.found.includes(i);
+    ctx.fillStyle = got ? '#e6f7ff' : '#2a3a40';
+    const lines = got ? wrap(LOGS[i], W - 160) : ['LOG ' + (i + 1) + ': ??? (not found yet)'];
+    lines.forEach(ln => { ctx.fillText(ln, 80, y); y += 16; });
+    y += 14;
+  }
+  ctx.fillStyle = '#6aa9bb'; ctx.textAlign = 'center'; ctx.fillText('PRESS J TO CLOSE', W / 2, H - 30);
+}
+
+// ---------- End screen: what the Listener learned about you ----------
+function endGame(win) {
+  state = 'over';
+  const b = G.brain, sc = Math.floor(G.score);
+  const isBest = sc > best;
+  if (isBest) { best = sc; try { localStorage.setItem('echo_best', best); } catch (e) {} }
+  G.tl.push({ t: G.t, ent: b.entropy(), acc: b.accuracy() });
+  if (win) [392, 523, 659, 784, 1046].forEach((f, i) => sfx(f, 0.35, 'triangle', 0.06, 0, i * 0.12));
+  else sfx(110, 1, 'sawtooth', 0.08, -70);
+
+  const t = document.getElementById('overTitle');
+  t.textContent = win ? 'YOU BROKE THE SILENCE.' : 'THE SILENCE TOOK YOU.';
+  t.className = win ? 'win' : 'lose';
+
+  const ent = b.entropy(), acc = b.accuracy();
+  const v = win ? 'THE RESONATOR SCREAMS. FOR THE FIRST TIME IN YEARS, THE CITY MAKES A SOUND.'
+          : ent < 0.35 ? 'YOU MOVED LIKE A MACHINE. IT FOUND YOU IN THE DARK EVERY TIME.'
+          : ent < 0.55 ? 'YOU HAVE HABITS, AND IT LEARNED THEM.'
+          : ent < 0.75 ? 'YOU CONFUSED IT. IT STRUGGLED TO GUESS WHERE YOU WENT.'
+          : 'IT NEVER FIGURED YOU OUT. TO IT, YOU WERE THE UNKNOWN.';
+  document.getElementById('verdict').textContent = (isBest ? 'NEW HIGH SCORE! ' : '') + v;
+
+  // pulse rhythm: how regular were your pulses? (coefficient of variation)
+  const iv = []; for (let i = 1; i < G.pulseTimes.length; i++) iv.push(G.pulseTimes[i] - G.pulseTimes[i - 1]);
+  let rhythm = 'NOT ENOUGH DATA', avgI = 0;
+  if (iv.length >= 3) {
+    avgI = iv.reduce((a, c) => a + c, 0) / iv.length;
+    const sd = Math.sqrt(iv.reduce((a, c) => a + (c - avgI) ** 2, 0) / iv.length), cvr = sd / avgI;
+    rhythm = cvr < 0.35 ? 'VERY REGULAR (easy to anticipate)' : cvr < 0.7 ? 'SOMEWHAT REGULAR' : 'IRREGULAR (hard to anticipate)';
+  }
+
+  const s = [
+    ['SCORE', sc], ['SURVIVED', G.t.toFixed(1) + 's'], ['RECORDINGS', G.found.length + '/6'], ['SECRETS', G.secrets + '/2'],
+    ['UNPREDICTABLE', Math.round(ent * 100) + '%'], ['IT PREDICTED YOU', Math.round(acc * 100) + '%'],
+    ['ECHO PULSES', G.pulseTimes.length], ['BEST', best]
+  ];
+  document.getElementById('stats').innerHTML = s.map(([l, x]) => `<div class="stat"><div class="l">${l}</div><div class="v">${x}</div></div>`).join('');
+
+  const tot = b.hist.reduce((a, c) => a + c, 0) || 1;
+  let fav = 1; for (let i = 1; i < 9; i++) if (b.hist[i] > b.hist[fav]) fav = i;
+  let bs = -1, bt = -1, bp = 0;
+  for (let i = 0; i < 9; i++) {
+    if (b.n[i] < 5) continue;
+    for (let j = 0; j < 9; j++) {
+      if (i === j) continue;
+      const pr = b.raw[i][j] / b.n[i];
+      if (pr > bp) { bp = pr; bs = i; bt = j; }
+    }
+  }
+  const still = Math.round(b.hist[0] / tot * 100);
+  const threat = ent < 0.35 ? 'HARMLESS. FULLY PREDICTABLE.' : ent < 0.55 ? 'LOW' : ent < 0.75 ? 'MODERATE' : 'UNKNOWN. COULD NOT BE PROFILED.';
+  let h = `<span class="hd">WHAT THE LISTENER LEARNED ABOUT YOU</span><br>`;
+  h += `> Listened to you for ${Math.round(G.t)} seconds (${b.preds} footstep samples)<br>`;
+  h += `> You mostly moved <b>${DNAMES[fav]}</b> (${Math.round(b.hist[fav] / tot * 100)}% of the time)<br>`;
+  if (bs >= 0) h += `> Habit: after moving <b>${DNAMES[bs]}</b>, you moved <b>${DNAMES[bt]}</b> ${Math.round(bp * 100)}% of the time<br>`;
+  h += `> ${still > 20 ? '<b>You freeze when scared</b>' : 'You rarely stood still'} (still ${still}% of the time)<br>`;
+  h += `> Echo rhythm: <b>${rhythm}</b>${avgI ? ' (one pulse every ' + avgI.toFixed(1) + 's)' : ''}<br>`;
+  h += `> Threat classification: <b>${threat}</b>`;
+  document.getElementById('report').innerHTML = h;
+
+  let lg = `<span class="hd">RECOVERED RECORDINGS (${G.found.length}/6)</span><br>`;
+  for (let i = 0; i < 6; i++) lg += G.found.includes(i) ? `> ${LOGS[i]}<br>` : `<span class="miss">> LOG ${i + 1}: ??? Still lost in the silence${i >= 4 ? ' (hidden behind a hollow wall)' : ''}</span><br>`;
+  if (!win && G.found.length < 6) lg += `<br>The mystery is not solved yet. Play again to uncover the truth.`;
+  document.getElementById('logs').innerHTML = lg;
+
+  drawHeat(); drawLine(); drawDirs();
+  document.getElementById('over').classList.add('show');
+}
+
+function drawHeat() {
+  const c = document.getElementById('heat'), x = c.getContext('2d');
+  x.fillStyle = '#020207'; x.fillRect(0, 0, c.width, c.height);
+  let mx = 0; for (const v of G.heat) mx = Math.max(mx, v);
+  const cw = c.width / HX, ch = c.height / HY;
+  for (let j = 0; j < HY; j++) for (let i = 0; i < HX; i++) {
+    const v = G.heat[j * HX + i] / (mx || 1);
+    if (v <= 0) continue;
+    const t = Math.sqrt(v);
+    x.fillStyle = `hsl(${190 - t * 190},100%,${18 + t * 45}%)`;
+    x.fillRect(i * cw, j * ch, cw + 0.5, ch + 0.5);
+  }
+}
+function drawLine() {
+  const c = document.getElementById('line'), x = c.getContext('2d'), w = c.width, h = c.height, pad = 24;
+  x.fillStyle = '#020207'; x.fillRect(0, 0, w, h);
+  x.strokeStyle = '#0f2a3a'; x.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) { const y = pad + (h - 2 * pad) * i / 4; x.beginPath(); x.moveTo(pad, y); x.lineTo(w - 8, y); x.stroke(); }
+  x.fillStyle = '#6aa9bb'; x.font = '8px monospace'; x.fillText('100%', 2, pad + 3); x.fillText('0%', 6, h - pad + 3);
+  const tl = G.tl, T = Math.max(tl.length ? tl[tl.length - 1].t : 1, 1);
+  const line = (key, col) => {
+    x.strokeStyle = col; x.lineWidth = 3; x.beginPath();
+    tl.forEach((d, i) => {
+      const px = pad + (w - pad - 8) * (d.t / T), py = h - pad - (h - 2 * pad) * d[key];
+      i ? x.lineTo(px, py) : x.moveTo(px, py);
+    });
+    x.stroke();
+  };
+  line('ent', '#3ef0ff'); line('acc', '#ff2e63');
+}
+function drawDirs() {
+  const c = document.getElementById('dirs'), x = c.getContext('2d'), w = c.width, h = c.height;
+  x.fillStyle = '#020207'; x.fillRect(0, 0, w, h);
+  const b = G.brain, mx = Math.max(...b.hist, 1), bw = w / 9;
+  for (let i = 0; i < 9; i++) {
+    const bh = (h - 40) * b.hist[i] / mx;
+    x.fillStyle = i === 0 ? '#6aa9bb' : '#3ef0ff';
+    x.fillRect(i * bw + 20, h - 28 - bh, bw - 40, bh);
+    x.fillStyle = '#e6f7ff'; x.font = '18px monospace'; x.textAlign = 'center';
+    x.fillText(ARROWS[i], i * bw + bw / 2, h - 8);
+  }
+}
+
+// ---------- Flow ----------
+function start() {
+  newGame(); state = 'play';
+  document.getElementById('menu').classList.remove('show');
+  document.getElementById('over').classList.remove('show');
+  sfx(1200, 0.5, 'sine', 0.05, -1000);
+}
+function toMenu() {
+  state = 'menu';
+  document.getElementById('over').classList.remove('show');
+  document.getElementById('menu').classList.add('show');
+  document.getElementById('hsMenu').textContent = best ? 'HIGH SCORE: ' + best : '';
+}
+document.getElementById('startBtn').onclick = start;
+document.getElementById('againBtn').onclick = start;
+document.getElementById('menuBtn').onclick = toMenu;
+document.getElementById('hsMenu').textContent = best ? 'HIGH SCORE: ' + best : '';
+
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.033, (now - last) / 1000); last = now;
+  if (state === 'play') update(dt);
+  render();
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
